@@ -20,7 +20,7 @@ if (-not (Test-Path $base)) {
 $versions = Get-ChildItem $base -Directory | Where-Object { Test-Path (Join-Path $_.FullName "RobloxPlayerBeta.exe") }
 if (-not $versions) {
     Write-Host "Nenhuma versao do RobloxPlayerBeta.exe encontrada." -ForegroundColor Red
-    exit 1
+    return
 }
 
 foreach ($v in $versions) {
