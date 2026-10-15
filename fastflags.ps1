@@ -127,9 +127,73 @@ function Pausa($texto = "Pressione qualquer tecla para voltar...") {
 
 # ---------------- Logica ----------------
 function Get-Versoes {
-    $base = Join-Path $env:LOCALAPPDATA "Roblox\Versions"
-    if (-not (Test-Path $base)) { return @() }
-    return @(Get-ChildItem $base -Directory | Where-Object { Test-Path (Join-Path $_.FullName "RobloxPlayerBeta.exe") })
+    $bases = @(
+        (Join-Path $env:LOCALAPPDATA "Roblox\Versions"),
+        (Join-Path ${env:ProgramFiles(x86)} "Roblox\Versions")
+    )
+    $lista = @()
+    foreach ($b in $bases) {
+        if (Test-Path $b) {
+            $lista += Get-ChildItem $b -Directory | Where-Object { Test-Path (Join-Path $_.FullName "RobloxPlayerBeta.exe") }
+        }
+    }
+    return @($lista | Sort-Object LastWriteTime -Descending)
+}
+
+function Get-VersaoOnline {
+    try { return Invoke-RestMethod "https://clientsettings.roblox.com/v2/client-version/WindowsPlayer" -TimeoutSec 6 }
+    catch { return $null }
+}
+
+function Tela-Versoes {
+    Clear-Host; Mostrar-Banner "DarkCyan"
+    Girar "Verificando versoes instaladas" 700
+    $v = Get-Versoes
+    Girar "Consultando versao mais recente" 700
+    $online = Get-VersaoOnline
+
+    Write-Host ""
+    Topo
+    Linha "VERSOES DO ROBLOX" "White"
+    Divisoria
+    if ($online) {
+        Linha "Mais recente (servidor):" "Gray"
+        Linha ("  " + $online.clientVersionUpload) "Cyan"
+        Linha ("  Numero: " + $online.version) "DarkGray"
+    } else {
+        Linha "Servidor: nao foi possivel consultar (sem internet?)" "Yellow"
+    }
+    Divisoria
+    Linha ("Instaladas neste PC: " + $v.Count) "Gray"
+    $n = 0
+    foreach ($x in $v) {
+        $n++
+        $tags = @()
+        if ($n -eq 1) { $tags += "mais nova" }
+        if ($online -and $x.Name -eq $online.clientVersionUpload) { $tags += "atualizada" }
+        if (Test-Path (Join-Path $x.FullName "ClientSettings\ClientAppSettings.json")) { $tags += "flags ativos" }
+        Linha ("{0}. {1}" -f $n, $x.Name) "Cyan"
+        Linha ("   Modificada: {0}" -f $x.LastWriteTime.ToString("dd/MM/yyyy HH:mm")) "DarkGray"
+        if ($tags.Count -gt 0) { Linha ("   " + ($tags -join " | ")) "Green" }
+    }
+    Divisoria
+    if ($v.Count -eq 0) {
+        Linha "Nenhuma versao encontrada. Instale o Roblox pelo site." "Red"
+    } else {
+        if ($v.Count -gt 1) {
+            Linha "Ha mais de uma versao instalada." "Yellow"
+            Linha "Os fast flags sao aplicados em todas." "Yellow"
+        }
+        if ($online -and $v[0].Name -ne $online.clientVersionUpload) {
+            Linha "Roblox desatualizado: ao abrir ele vai baixar" "Yellow"
+            Linha ("a versao " + $online.clientVersionUpload) "Yellow"
+            Linha "Depois, reaplique os fast flags." "Yellow"
+        } elseif ($online) {
+            Linha "Seu Roblox esta na versao mais recente." "Green"
+        }
+    }
+    Base
+    Pausa
 }
 
 function Roblox-Aberto { return [bool](Get-Process -Name "RobloxPlayerBeta" -ErrorAction SilentlyContinue) }
@@ -166,7 +230,8 @@ function Aplicar {
     }
     Barra "Aplicando    " 26 25
     Write-Host ""
-    Msg "ok" ("{0} fast flag(s) aplicados com sucesso." -f $final.Count)
+    Msg "ok" ("{0} fast flag(s) aplicados em {1} versao(oes) do Roblox." -f $final.Count, $versoes.Count)
+    if ($versoes.Count -gt 1) { Msg "aviso" "Mais de uma versao instalada: todas foram atualizadas." }
     Pausa
 }
 
@@ -239,11 +304,16 @@ function Menu {
         Divisoria
         Linha ("Fast flags: " + $statusTxt) $statusCor
         Linha ("Selecionados: {0}/{1}     Roblox: {2}" -f (Qtd-Selecionados), $Catalogo.Count, $robloxTxt) "Gray"
+        $nv = (Get-Versoes).Count
+        if ($nv -gt 1) { Linha ("Versoes instaladas: {0}  (atencao: mais de uma)" -f $nv) "Yellow" }
+        elseif ($nv -eq 1) { Linha "Versoes instaladas: 1" "Gray" }
+        else { Linha "Roblox nao encontrado neste PC" "Red" }
         Divisoria
         Linha "[1]  Aplicar fast flags selecionados" "Cyan"
         Linha "[2]  Escolher / ver fast flags" "Cyan"
         Linha "[3]  Abrir Roblox" "Cyan"
         Linha "[4]  Remover fast flags (voltar ao padrao)" "Cyan"
+        Linha "[5]  Versoes do Roblox (instaladas / mais recente)" "Cyan"
         Linha "[0]  Sair" "DarkGray"
         Base
 
@@ -253,6 +323,7 @@ function Menu {
             "2" { Tela-Flags }
             "3" { Abrir }
             "4" { Remover }
+            "5" { Tela-Versoes }
             "0" { return }
         }
     }
